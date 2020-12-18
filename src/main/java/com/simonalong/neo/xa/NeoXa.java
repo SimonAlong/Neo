@@ -1,4 +1,4 @@
-package com.simonalong.neo.db.xa;
+package com.simonalong.neo.xa;
 
 import com.simonalong.neo.Neo;
 import com.simonalong.neo.NeoMap;
@@ -12,6 +12,7 @@ import com.simonalong.neo.exception.xa.XaStartException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
@@ -31,7 +32,7 @@ public class NeoXa {
     /**
      * key为当前db的名字，value为Neo的动态代理对象
      */
-    private  Map<String, NeoXaProxy> dbMap = new ConcurrentHashMap<>(8);
+    private Map<String, NeoXaProxy> dbMap = new ConcurrentHashMap<>(8);
     private static final Integer KV_NUM = 2;
 
     /**
@@ -60,7 +61,7 @@ public class NeoXa {
             }
 
             if(value instanceof Neo) {
-                neoMap.put((String) key, value);
+                xa.add((String) key, (Neo) value);
             }
 
             if(value instanceof DataSource){
@@ -68,7 +69,14 @@ public class NeoXa {
             }
             throw new NeoException("value 类型必须为Neo或者Datasource类型");
         }
+        return xa;
+    }
 
+    public static NeoXa ofNeoList(List<Neo> neoList) {
+        NeoXa xa = new NeoXa();
+        for (Neo neo : neoList) {
+            xa.add(neo.getName(), neo);
+        }
         return xa;
     }
 
@@ -118,19 +126,37 @@ public class NeoXa {
             prepareXid();
             commitXid();
         } catch (Throwable e) {
-            if (e instanceof XaStartException) {
-                log.error(LOG_PRE + "start xid fail", e);
-            } else if (e instanceof XaEndException) {
-                log.error(LOG_PRE + "end xid fail", e);
-            } else if (e instanceof XaPrepareException) {
-                log.error(LOG_PRE + "prepare xid fail", e);
-                rollbackXid();
-            } else if (e instanceof XaCommitException) {
-                log.error(LOG_PRE + "commit xid fail", e);
-                rollbackXid();
-            }
-            log.error(LOG_PRE + "xa run fail, xid={}", getXidStr(), e);
+            afterException(e);
         }
+    }
+
+    public <T> T call(Callable<T> callable) {
+        try {
+            startXid();
+            T t = callable.call();
+            endXid();
+            prepareXid();
+            commitXid();
+            return t;
+        } catch (Throwable e) {
+            afterException(e);
+        }
+        return null;
+    }
+
+    private void afterException(Throwable e) {
+        if (e instanceof XaStartException) {
+            log.error(LOG_PRE + "init xid fail", e);
+        } else if (e instanceof XaEndException) {
+            log.error(LOG_PRE + "end xid fail", e);
+        } else if (e instanceof XaPrepareException) {
+            log.error(LOG_PRE + "prepare xid fail", e);
+            rollbackXid();
+        } else if (e instanceof XaCommitException) {
+            log.error(LOG_PRE + "commit xid fail", e);
+            rollbackXid();
+        }
+        log.error(LOG_PRE + "xa run fail, xid={}", getXidStr(), e);
     }
 
     private List<String> getXidStr() {
@@ -143,7 +169,7 @@ public class NeoXa {
     }
 
     /**
-     * 执行 xa start xid
+     * 执行 xa init xid
      */
     private void startXid() throws XaStartException {
         try {

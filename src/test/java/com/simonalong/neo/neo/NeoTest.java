@@ -1,12 +1,10 @@
 package com.simonalong.neo.neo;
 
 import com.alibaba.fastjson.JSON;
-import com.simonalong.neo.Columns;
-import com.simonalong.neo.NeoBaseTest;
-import com.simonalong.neo.NeoMap;
-import com.simonalong.neo.TableMap;
+import com.simonalong.neo.*;
 import com.simonalong.neo.entity.DemoEntity;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -17,6 +15,8 @@ import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import com.simonalong.neo.sql.InList;
 import lombok.SneakyThrows;
 import org.junit.Test;
 
@@ -186,7 +186,10 @@ public class NeoTest extends NeoBaseTest {
     @SneakyThrows
     public void testUpdate1(){
         NeoMap dataMap = NeoMap.of("group", "ok2");
-        NeoMap searchMap = NeoMap.of("group", "group2", "name", "name");
+        List<Integer> dataList = new ArrayList<>();
+        dataList.add(1);
+        dataList.add(3);
+        NeoMap searchMap = NeoMap.of("group", "group2", "id", new InList(dataList));
         // update neo_table1 set `group`=? where `group` =  ? and `name` =  ?
         show(neo.update(TABLE_NAME, dataMap, searchMap));
     }
@@ -464,6 +467,23 @@ public class NeoTest extends NeoBaseTest {
             // [Y, N]
             show(dataList);
         }
+    }
+
+
+    @Test
+    public void testInsertMysql(){
+
+        String innerTableName = "demo_char1";
+        String URL = "jdbc:mysql://127.0.0.1:3306/neo?useUnicode=true&characterEncoding=UTF-8&useSSL=false&&allowPublicKeyRetrieval=true";
+        String USER = "neo_test";
+        String PASSWORD = "neo@Test123";
+
+        Neo db = Neo.connect(URL, USER, PASSWORD);
+
+        String sql = "create table if not exists %s (`char` char not null)engine=innodb";
+        neo.execute(sql, innerTableName);
+
+        show(db.insert(innerTableName, NeoMap.of("char", "t")));
     }
 
 //    /**

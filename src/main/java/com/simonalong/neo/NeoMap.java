@@ -1,6 +1,7 @@
 package com.simonalong.neo;
 
 import com.alibaba.fastjson.JSON;
+import com.google.gson.Gson;
 import com.simonalong.neo.annotation.Column;
 import com.simonalong.neo.db.TimeDateConverter;
 import com.simonalong.neo.exception.NeoException;
@@ -14,11 +15,10 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -26,6 +26,17 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 /**
+ * 实现map中的所有功能
+ *
+ * <p>
+ *     此外新增更多功能
+ *     <ul>
+ *         <li>1.各种静态读取方法</li>
+ *         <li>2.跟实体的转换</li>
+ *         <li>3.不同类型的值获取</li>
+ *         <li>4.value可以为null</li>
+ *         <li>5.条件过滤</li>
+ *     </ul>
  * @author zhouzhenyong
  * @since 2019/3/12 下午12:46
  */
@@ -37,7 +48,16 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
     /**
      * key为对应的表，value：key为数据对应的key，value为属性对应的值
      */
-    private ConcurrentSkipListMap<String, Object> dataMap = new ConcurrentSkipListMap<>();
+    private ConcurrentHashMap<String, Object> dataMap = new ConcurrentHashMap<>();
+    @Getter
+    private Set<String> nullValueKeySet = new HashSet<>();
+    /**
+     * 只是支持value为空
+     */
+    @Setter
+    @Getter
+    @Accessors(chain = true)
+    private Boolean supportValueNull = false;
     /**
      * 添加条件过滤器
      * <p>
@@ -51,7 +71,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      */
     @Getter
     @Setter
-    private static NamingChg globalNaming = NamingChg.DEFAULT;
+    private static NamingChg globalNaming = NamingChg.UNDERLINE;
     /**
      * 本次的默认转换规则
      */
@@ -115,7 +135,11 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      * @return 转换之后的NeoMap
      */
     public static NeoMap from(Object object) {
-        return from(object, NamingChg.DEFAULT, new ArrayList<>(), new ArrayList<>());
+        return from(object, NamingChg.UNDERLINE, new ArrayList<>(), new ArrayList<>(), false);
+    }
+
+    public static NeoMap from(Object object, Boolean supportValueNull) {
+        return from(object, NamingChg.UNDERLINE, new ArrayList<>(), new ArrayList<>(), supportValueNull);
     }
 
     /**
@@ -126,7 +150,11 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      * @return 转换之后的NeoMap
      */
     public static NeoMap from(Object object, NamingChg namingChg) {
-        return from(object, namingChg, new ArrayList<>(), new ArrayList<>());
+        return from(object, namingChg, new ArrayList<>(), new ArrayList<>(), false);
+    }
+
+    public static NeoMap from(Object object, Boolean supportValueNull, NamingChg namingChg) {
+        return from(object, namingChg, new ArrayList<>(), new ArrayList<>(), supportValueNull);
     }
 
     /**
@@ -137,7 +165,11 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      * @return 转换之后的NeoMap
      */
     public static NeoMap from(Object object, String... columnsNames) {
-        return from(object, NamingChg.DEFAULT, Arrays.asList(columnsNames), new ArrayList<>());
+        return from(object, NamingChg.UNDERLINE, Arrays.asList(columnsNames), new ArrayList<>(), false);
+    }
+
+    public static NeoMap from(Object object, Boolean supportValueNull, String... columnsNames) {
+        return from(object, NamingChg.UNDERLINE, Arrays.asList(columnsNames), new ArrayList<>(), supportValueNull);
     }
 
     private static NeoMap from(Object object, Columns columns) {
@@ -147,11 +179,25 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
         return from(object, columns.getMetaFieldSets().toArray(new String[]{}));
     }
 
+    private static NeoMap from(Object object, Columns columns, Boolean supportValueNull) {
+        if (Columns.isEmpty(columns)) {
+            return from(object);
+        }
+        return from(object, supportValueNull, columns.getMetaFieldSets().toArray(new String[]{}));
+    }
+
     public static NeoMap from(Object object, Columns columns, NamingChg namingChg) {
         if (Columns.isEmpty(columns)) {
             return from(object, namingChg);
         }
-        return from(object, namingChg, new ArrayList<>(columns.getMetaFieldSets()), new ArrayList<>());
+        return from(object, namingChg, new ArrayList<>(columns.getMetaFieldSets()), new ArrayList<>(), false);
+    }
+
+    public static NeoMap from(Object object, Columns columns, NamingChg namingChg, Boolean supportValueNull) {
+        if (Columns.isEmpty(columns)) {
+            return from(object, namingChg);
+        }
+        return from(object, namingChg, new ArrayList<>(columns.getMetaFieldSets()), new ArrayList<>(), supportValueNull);
     }
 
     /**
@@ -162,7 +208,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      * @return 转换之后的NeoMap
      */
     public static NeoMap fromInclude(Object object, String... fields) {
-        return from(object, NamingChg.DEFAULT, Arrays.asList(fields), new ArrayList<>());
+        return from(object, NamingChg.UNDERLINE, Arrays.asList(fields), new ArrayList<>(), false);
     }
 
     /**
@@ -174,7 +220,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      * @return 转换之后的NeoMap
      */
     public static NeoMap fromInclude(Object object, NamingChg namingChg, String... fields) {
-        return from(object, namingChg, Arrays.asList(fields), new ArrayList<>());
+        return from(object, namingChg, Arrays.asList(fields), new ArrayList<>(), false);
     }
 
     /**
@@ -185,7 +231,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      * @return 转换之后的NeoMap
      */
     public static NeoMap fromExclude(Object object, String... fields) {
-        return from(object, NamingChg.DEFAULT, new ArrayList<>(), Arrays.asList(fields));
+        return from(object, NamingChg.UNDERLINE, new ArrayList<>(), Arrays.asList(fields), false);
     }
 
     /**
@@ -197,7 +243,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      * @return 转换之后的NeoMap
      */
     static NeoMap fromExclude(Object object, NamingChg namingChg, String... fields) {
-        return from(object, namingChg, new ArrayList<>(), Arrays.asList(fields));
+        return from(object, namingChg, new ArrayList<>(), Arrays.asList(fields), false);
     }
 
     /**
@@ -207,11 +253,12 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
      * @param namingChg 转换规则
      * @param inFieldList 包括的对象的属性名列表
      * @param exFieldList 排除的对象的属性名列表
+     * @param supportValueNull 是否支持value为空
      * @return 转换之后的NeoMap
      */
     @SuppressWarnings("unchecked")
-    public static NeoMap from(Object object, NamingChg namingChg, List<String> inFieldList, List<String> exFieldList) {
-        NeoMap neoMap = NeoMap.of().setNamingChg(namingChg);
+    public static NeoMap from(Object object, NamingChg namingChg, List<String> inFieldList, List<String> exFieldList, Boolean supportValueNull) {
+        NeoMap neoMap = NeoMap.of().setNamingChg(namingChg).setSupportValueNull(supportValueNull);
         if (null == object) {
             return neoMap;
         }
@@ -237,6 +284,35 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
         NeoMap targetMap = NeoMap.of();
         sourceMap.stream().forEach(c -> targetMap.putIfAbsent(namingChg.smallCamelToOther(c.getKey()), c.getValue()));
         return targetMap;
+    }
+
+    /**
+     * 反解析数据
+     * @param fastJsonString {@link com.alibaba.fastjson}的序列化字符串
+     * @return 解析后的数据
+     */
+    public static NeoMap fromFastJsonStr(String fastJsonString) {
+        NeoMap resultMap = NeoMap.of();
+        if (null == fastJsonString || "".equals(fastJsonString)) {
+            return resultMap;
+        }
+        resultMap.putAll(JSON.parseObject(fastJsonString));
+        return resultMap;
+    }
+
+    /**
+     * 反解析数据
+     * @param gsonString {@link com.google.gson}的序列化字符串
+     * @return 解析后的数据
+     */
+    @SuppressWarnings("unchecked")
+    public static NeoMap fromGsonStr(String gsonString) {
+        NeoMap resultMap = NeoMap.of();
+        if (null == gsonString || "".equals(gsonString)) {
+            return resultMap;
+        }
+        resultMap.putAll(new Gson().fromJson(gsonString, Map.class));
+        return resultMap;
     }
 
     /**
@@ -292,9 +368,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
                 f.setAccessible(true);
                 try {
                     Object value = TimeDateConverter.entityTimeToLong(f.get(object));
-                    if (null != value) {
-                        neoMap.putIfAbsent(neoMap.namingChg(f, false), value);
-                    }
+                    neoMap.put(neoMap.namingChg(f, false), value);
                 } catch (IllegalAccessException e) {
                     throw new NeoException(e);
                 }
@@ -322,7 +396,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
     /**
      * 从实体集合转换为NeoMap集合
      * @param dataList 待转换的数据集合
-     * @param columns 数据列名
+     * @param columns 只要的列名
      * @param <T> 实体类型
      * @return NeoMap集合
      */
@@ -334,7 +408,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
     }
 
     public static <T> List<NeoMap> fromArray(List<T> dataList) {
-        return fromArray(dataList, NamingChg.UNDERLINE, null);
+        return fromArray(dataList, NamingChg.UNDERLINE, null, false);
     }
 
     public static <T> List<NeoMap> fromArray(List<T> dataList, NamingChg namingChg, Columns columns) {
@@ -345,7 +419,29 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
     }
 
     public static <T> List<NeoMap> fromArray(List<T> dataList, NamingChg namingChg) {
-        return fromArray(dataList, namingChg, null);
+        return fromArray(dataList, namingChg, null, false);
+    }
+
+    public static <T> List<NeoMap> fromArray(List<T> dataList, Columns columns, Boolean supportValueNull) {
+        if (null == dataList || dataList.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return dataList.stream().map(m -> NeoMap.from(m, columns, supportValueNull)).collect(Collectors.toList());
+    }
+
+    public static <T> List<NeoMap> fromArray(List<T> dataList, Boolean supportValueNull) {
+        return fromArray(dataList, NamingChg.UNDERLINE, null, supportValueNull);
+    }
+
+    public static <T> List<NeoMap> fromArray(List<T> dataList, NamingChg namingChg, Columns columns, Boolean supportValueNull) {
+        if (null == dataList || dataList.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return dataList.stream().map(m -> NeoMap.from(m, columns, namingChg, supportValueNull)).collect(Collectors.toList());
+    }
+
+    public static <T> List<NeoMap> fromArray(List<T> dataList, NamingChg namingChg, Boolean supportValueNull) {
+        return fromArray(dataList, namingChg, null, supportValueNull);
     }
 
     /**
@@ -461,21 +557,7 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
 
     private Object getValue(Field field) {
         String key = namingChg(field, true);
-        Object value = toEntityValue(field, key);
-
         Class<?> fieldClass = field.getType();
-        return ObjectUtil.cast(fieldClass, TimeDateConverter.valueToEntityTime(fieldClass, value));
-    }
-
-    /**
-     * NeoMap中的value向实体类型转换，先经过时间转换器，对于是时间类型的则转换为时间类型，对于非时间类型的，则保持，然后再经过兼容类型
-     *
-     * @param f 属性
-     * @param key 类型转换后的名字
-     * @return 经过转换之后的实体中的值
-     */
-    private Object toEntityValue(Field f, String key) {
-        Class<?> fieldClass = f.getType();
         return ObjectUtil.cast(fieldClass, TimeDateConverter.valueToEntityTime(fieldClass, get(key)));
     }
 
@@ -517,10 +599,10 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
         if (Columns.isEmpty(columns)) {
             return this;
         }
-        NeoMap result = NeoMap.of();
+        NeoMap result = this.clone();
         this.stream().forEach(f -> {
-            if (!columns.contains(f.getKey())) {
-                result.put(f.getKey(), f.getValue());
+            if (columns.contains(f.getKey())) {
+                result.delete(f.getKey());
             }
         });
         return result;
@@ -557,15 +639,15 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
     }
 
     public Stream<Entry<String, Object>> stream() {
-        return dataMap.entrySet().stream();
+        return entrySet().stream();
     }
 
     public Stream<String> keyStream() {
-        return dataMap.keySet().stream();
+        return keySet().stream();
     }
 
     public Stream<Object> valueStream() {
-        return dataMap.values().stream();
+        return values().stream();
     }
 
     /**
@@ -794,16 +876,25 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
 
     @Override
     public int size() {
+        if (supportValueNull) {
+            return dataMap.size() + nullValueKeySet.size();
+        }
         return dataMap.size();
     }
 
     @Override
-    public int hashCode(){
+    public int hashCode() {
+        if (supportValueNull) {
+            return (dataMap.hashCode() + nullValueKeySet.hashCode()) / 2;
+        }
         return dataMap.hashCode();
     }
 
     @Override
     public boolean isEmpty() {
+        if (supportValueNull) {
+            return dataMap.isEmpty() && nullValueKeySet.isEmpty();
+        }
         return dataMap.isEmpty();
     }
 
@@ -811,6 +902,9 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
     public boolean containsKey(Object key) {
         if (null == key) {
             return false;
+        }
+        if (supportValueNull) {
+            return dataMap.containsKey(key) || nullValueKeySet.contains(key);
         }
         return dataMap.containsKey(key);
     }
@@ -826,6 +920,9 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
 
     @Override
     public boolean containsValue(Object value) {
+        if (supportValueNull && null == value) {
+            return true;
+        }
         return dataMap.containsValue(value);
     }
 
@@ -859,12 +956,19 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
             } else {
                 dataMap.put(key, value);
             }
+        } else {
+            if (supportValueNull) {
+                nullValueKeySet.add(key);
+            }
         }
         return value;
     }
 
     @Override
     public Object remove(Object key) {
+        if (supportValueNull) {
+            return nullValueKeySet.remove(key);
+        }
         return dataMap.remove(key);
     }
 
@@ -874,31 +978,49 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
             return;
         }
 
-        if(m instanceof NeoMap){
-            getDataMap().putAll(NeoMap.class.cast(m).getDataMap());
-        }else{
-            m.forEach((key, value) -> put(key, TimeDateConverter.entityTimeToLong(value)));
+        if (m instanceof NeoMap) {
+            NeoMap innerMap = (NeoMap) m;
+            getDataMap().putAll(innerMap.getDataMap());
+            getNullValueKeySet().addAll(innerMap.getNullValueKeySet());
+        } else {
+            m.forEach((key, value) -> {
+                if (null == value) {
+                    getNullValueKeySet().add(key);
+                } else {
+                    put(key, TimeDateConverter.entityTimeToLong(value));
+                }
+            });
         }
     }
 
     @Override
     public void clear() {
         dataMap.clear();
+        nullValueKeySet.clear();
     }
 
     @Override
     public Set<String> keySet() {
-        return dataMap.keySet();
+        return entrySet().stream().map(Entry::getKey).collect(Collectors.toSet());
     }
 
     @Override
     public Collection<Object> values() {
-        return dataMap.values();
+        return entrySet().stream().map(Entry::getValue).collect(Collectors.toList());
     }
 
+    /**
+     * 这里需要将value为null的也添加进来
+     *
+     * @return entry集合
+     */
     @Override
-    public Set<Entry<String, Object>> entrySet() {
-        return dataMap.entrySet();
+    @SuppressWarnings("unchecked")
+    public Set<Map.Entry<String, Object>> entrySet() {
+        Set entrySet = new HashSet<>();
+        entrySet.addAll(dataMap.entrySet().stream().map(e -> new NeoMap.Node(e.getKey(), e.getValue())).collect(Collectors.toSet()));
+        entrySet.addAll(nullValueKeySet.stream().map(e -> new NeoMap.Node(e, null)).collect(Collectors.toSet()));
+        return entrySet;
     }
 
     /**
@@ -918,7 +1040,13 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
     @Override
     public boolean equals(Object object) {
         if (object instanceof NeoMap) {
-            return dataMap.equals(NeoMap.class.cast(object).getDataMap());
+            NeoMap innerObject = (NeoMap) object;
+            if (dataMap.equals(innerObject.getDataMap())) {
+                if (supportValueNull || innerObject.getSupportValueNull()) {
+                    return nullValueKeySet.equals(innerObject.getNullValueKeySet());
+                }
+                return true;
+            }
         }
         return false;
     }
@@ -935,15 +1063,33 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
     }
 
     /**
+     * fastJson格式的序列化字符
+     * @return 字符串
+     */
+    public String toFastJsonString() {
+        return JSON.toJSONString(dataMap);
+    }
+
+    /**
+     * gson格式的序列化字符
+     * @return 字符串
+     */
+    public String toGsonString() {
+        return new Gson().toJson(dataMap);
+    }
+
+    /**
      * 这里采用深拷贝，浅拷贝存在集合并发修改问题
      */
     @SuppressWarnings("all")
     @Override
     public NeoMap clone() {
         NeoMap neoMap = NeoMap.of();
-        neoMap.putAll(dataMap.clone());
+        neoMap.putAll(dataMap);
         neoMap.setNamingChg(namingChg);
         neoMap.setConditionMap(conditionMap);
+        neoMap.setSupportValueNull(supportValueNull);
+        neoMap.getNullValueKeySet().addAll(nullValueKeySet);
         return neoMap;
     }
 
@@ -1017,30 +1163,58 @@ public class NeoMap implements Map<String, Object>, Cloneable, Serializable {
         }
     }
 
-    @EqualsAndHashCode
-    static class Node<K,V> implements Map.Entry<K,V> {
-        final K key;
-        V value;
 
-        Node(K key, V value) {
+    static class Node implements Map.Entry<String, Object>, Comparable {
+        final String key;
+        Object value;
+
+        Node(String key, Object value) {
             this.key = key;
             this.value = value;
         }
 
         @Override
-        public K getKey() {
+        public String getKey() {
             return key;
         }
 
         @Override
-        public V getValue() {
+        public Object getValue() {
             return value;
         }
 
         @Override
-        public V setValue(V value) {
+        public Object setValue(Object value) {
             this.value = value;
             return value;
+        }
+
+        @Override
+        public int compareTo(Object o) {
+            if (this.equals(o)) {
+                return 0;
+            }
+
+            Node innerNode = (Node) o;
+            return key.compareTo(innerNode.getKey());
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Node)) {
+                return false;
+            }
+            Node node = (Node) o;
+            if (null == getValue()) {
+                return getKey().equals(node.getKey());
+            } else {
+                return getKey().equals(node.getKey()) && getValue().equals(node.getValue());
+            }
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(getKey());
         }
     }
 }

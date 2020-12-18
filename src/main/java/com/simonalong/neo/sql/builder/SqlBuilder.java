@@ -2,17 +2,18 @@ package com.simonalong.neo.sql.builder;
 
 import static com.simonalong.neo.NeoConstant.*;
 
+import com.simonalong.neo.Neo;
+import com.simonalong.neo.NeoConstant;
 import com.simonalong.neo.NeoMap;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
+import com.simonalong.neo.Pair;
+import com.simonalong.neo.db.DbType;
+import com.simonalong.neo.db.NeoContext;
 import com.simonalong.neo.sql.InList;
-import javafx.util.Pair;
 import lombok.experimental.UtilityClass;
 
 
@@ -145,6 +146,13 @@ public class SqlBuilder {
      * @return 转换后的列名，比如name 到 `name`
      */
     public String toDbField(String column) {
+        Neo neo = NeoContext.getNeo();
+        if (null != neo && null != neo.getDbType()) {
+            // pg不需要 ` 这种字段修饰符
+            if (neo.getDbType().equals(DbType.PGSQL)) {
+                return column;
+            }
+        }
         String dom = "`";
         if (column.startsWith(dom) && column.endsWith(dom)) {
             return column;
@@ -188,6 +196,20 @@ public class SqlBuilder {
     }
 
     /**
+     * 给批量更新使用的值
+     *
+     * @param dataMapList 值集合
+     * @return 值集合
+     */
+    public List<Object> buildBatchValueList(List<NeoMap> dataMapList) {
+        if (null == dataMapList || dataMapList.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return dataMapList.stream().flatMap(NeoMap::valueStream).collect(Collectors.toList());
+    }
+
+    /**
      * 将对应的值进行拼接
      * <p>
      *     数值有两种情况：
@@ -202,6 +224,9 @@ public class SqlBuilder {
     private String valueFix(NeoMap searchMap, Entry<String, Object> entry){
         Object value = entry.getValue();
         String key = toDbField(entry.getKey());
+        if (null == value) {
+            return key + " is null";
+        }
         if (value instanceof String) {
             String valueStr = String.class.cast(value);
 

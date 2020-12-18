@@ -17,6 +17,7 @@ import java.util.Map;
 
 import com.simonalong.neo.exception.NeoMapChgException;
 import com.simonalong.neo.map.table.NeoMapEnum;
+import com.simonalong.neo.sql.builder.SqlBuilder;
 import com.simonalong.neo.util.Maps;
 import org.junit.Assert;
 import org.junit.Test;
@@ -37,6 +38,36 @@ public class NeoMapTest extends BaseTest {
         Map<String, Object> expect = Maps.of().add("a", 123).add("b", 12).build();
         // {"a":123,"b":12}
         Assert.assertEquals(expect, neoMap1.getDataMap());
+    }
+
+    /**
+     * 测试，如果有value为null的情况，则两个NeoMap相等
+     */
+    @Test
+    public void testEqual1(){
+        NeoMap neoMap1 = NeoMap.of("a", 123, "b", 12);
+        NeoMap neoMap2 = NeoMap.of("a", 123, "b", 12);
+        NeoMap neoMap3 = NeoMap.of("a", 123, "b", 12, "c", null);
+
+        Assert.assertEquals(neoMap1, neoMap2);
+        Assert.assertEquals(neoMap1, neoMap3);
+    }
+
+    /**
+     * 测试，如果有value为null的情况，而且设置了允许value为空
+     */
+    @Test
+    public void testEqual2(){
+        NeoMap neoMap1 = NeoMap.of("a", 123, "b", 12);
+        NeoMap neoMap2 = NeoMap.of("a", 123, "b", 12);
+        NeoMap neoMap3 = NeoMap.of();
+        neoMap3.setSupportValueNull(true);
+        neoMap3.put("a", 123);
+        neoMap3.put("b", 12);
+        neoMap3.put("c", null);
+
+        Assert.assertEquals(neoMap1, neoMap2);
+        Assert.assertNotEquals(neoMap1, neoMap3);
     }
 
     /**
@@ -68,11 +99,11 @@ public class NeoMapTest extends BaseTest {
     }
 
     /**
-     * 测试as：key为实体的属性名，对实体而言是不转换的
+     * 测试as：key为实体的属性名，对实体而言默
      */
     @Test
     public void testAs1() {
-        NeoMap neoMap = NeoMap.of("name", "name1", "userName", "userName1");
+        NeoMap neoMap = NeoMap.of("name", "name1", "user_name", "userName1");
         NeoMapAsEntity neoMapAsEntity = neoMap.as(NeoMapAsEntity.class);
 
         NeoMapAsEntity expect = new NeoMapAsEntity();
@@ -304,7 +335,7 @@ public class NeoMapTest extends BaseTest {
         demo.setMyFriendName("nana");
 
         // 对于of中的数据，要转换实体，是要走转换规则和@Column的
-        NeoMap expect = NeoMap.of("name", "name1", "userName", "userName1", "friend_name", "nana");
+        NeoMap expect = NeoMap.of("name", "name1", "user_name", "userName1", "friend_name", "nana");
         Assert.assertEquals(expect, NeoMap.from(demo, "name", "userName", "myFriendName"));
         Assert.assertEquals(expect, NeoMap.fromInclude(demo, "name", "userName", "myFriendName"));
     }
@@ -316,7 +347,7 @@ public class NeoMapTest extends BaseTest {
     public void testFrom7() {
         // 即使这里添加了全局转化规则，但是对于局部规则转换这里是不生效的
         NeoMap.setGlobalNaming(NamingChg.UNDERLINE);
-        NeoMapFromEntity demo = new NeoMapFromEntity();
+        NeoMapFromEntity2 demo = new NeoMapFromEntity2();
         demo.setName("name1");
         demo.setUserName("username1");
 
@@ -333,7 +364,7 @@ public class NeoMapTest extends BaseTest {
      */
     @Test
     public void testFrom8(){
-        NeoMap sourceMap = NeoMap.of("group", "group1", "userName", "userName1");
+        NeoMap sourceMap = NeoMap.of("group", "group1", "user_name", "userName1");
 
         // 将map的key全部转换为下划线
         NeoMap neoMap = NeoMap.fromMap(sourceMap, NamingChg.UNDERLINE);
@@ -590,7 +621,7 @@ public class NeoMapTest extends BaseTest {
     @Test
     public void getNeoMapTest2() {
         NeoMapGetNeoMapEntity demoEntity = new NeoMapGetNeoMapEntity().setName("name").setAge(12).setUserName("user");
-        NeoMap data = NeoMap.of("a", NeoMap.of("name", "name", "age", 12L, "userName", "user"));
+        NeoMap data = NeoMap.of("a", NeoMap.of("name", "name", "age", 12L, "user_name", "user"));
         Assert.assertEquals(demoEntity, data.get(NeoMapGetNeoMapEntity.class, "a"));
     }
 
@@ -602,7 +633,7 @@ public class NeoMapTest extends BaseTest {
         NeoMapGetNeoMapEntity demoEntity = new NeoMapGetNeoMapEntity().setName("name").setAge(12).setUserName("user");
 
         NeoMap data = NeoMap.of("a", demoEntity);
-        NeoMap expect = NeoMap.of("name", "name", "age", 12, "userName", "user");
+        NeoMap expect = NeoMap.of("name", "name", "age", 12, "user_name", "user");
         Assert.assertEquals(expect, data.get(NeoMap.class, "a"));
     }
 
@@ -734,9 +765,9 @@ public class NeoMapTest extends BaseTest {
         List<NeoMapEntity> entityList = Arrays.asList(entity1, entity2, entity3);
 
         List<NeoMap> expectList = new ArrayList<>();
-        NeoMap demo1 = NeoMap.of().append("age", 11).append("data_user", "ok1");
-        NeoMap demo2 = NeoMap.of().append("age", 12).append("data_user", "ok2");
-        NeoMap demo3 = NeoMap.of().append("age", 13).append("data_user", "ok3");
+        NeoMap demo1 = NeoMap.of().append("age", 11).append("data_user", "ok1").append("user_address", null).append("name", null);
+        NeoMap demo2 = NeoMap.of().append("age", 12).append("data_user", "ok2").append("user_address", null).append("name", null);
+        NeoMap demo3 = NeoMap.of().append("age", 13).append("data_user", "ok3").append("user_address", null).append("name", null);
         expectList.add(demo1);
         expectList.add(demo2);
         expectList.add(demo3);
@@ -819,5 +850,41 @@ public class NeoMapTest extends BaseTest {
     public void keyStream(){
         NeoMap neoMap = NeoMap.of("a", 12, "b", "ok");
         neoMap.keyStream().forEach(this::show);
+    }
+
+    @Test
+    public void gsonTest(){
+        NeoMapEntity entity = new NeoMapEntity();
+        entity.setAge(12);
+        entity.setUserAddress("nihao");
+
+        NeoMap dataMap = NeoMap.from(entity);
+        String gsonString = dataMap.toGsonString();
+
+        Assert.assertEquals(entity, NeoMap.fromGsonStr(gsonString).as(NeoMapEntity.class));
+    }
+
+    @Test
+    public void fastJsonTest(){
+        NeoMapEntity entity = new NeoMapEntity();
+        entity.setAge(12);
+        entity.setUserAddress("nihao");
+
+        NeoMap dataMap = NeoMap.from(entity);
+        String gsonString = dataMap.toFastJsonString();
+
+        Assert.assertEquals(entity, NeoMap.fromFastJsonStr(gsonString).as(NeoMapEntity.class));
+    }
+
+
+    @Test
+    public void testSqlBuilder(){
+        NeoMap dataMap = NeoMap.of();
+        dataMap.setSupportValueNull(true);
+        dataMap.put("k1", null);
+        dataMap.put("k2", 12);
+
+        show(SqlBuilder.buildWhere(dataMap));
+        show(SqlBuilder.buildValueList(dataMap));
     }
 }

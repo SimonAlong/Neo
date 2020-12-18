@@ -18,6 +18,8 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -25,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
  * @since 2019/3/12 下午12:46
  */
 @Slf4j
+@EqualsAndHashCode(of = {"rdbmsName", "catalogName", "schemaToTableMap"})
 public final class NeoDb {
 
     private Neo neo;
@@ -263,7 +266,7 @@ public final class NeoDb {
         ResultSet rs = dbMeta.getTables(catalog, null, null, new String[]{"TABLE"});
         List<String> tablePreList = Arrays.asList(tablePres);
         while (rs.next()) {
-            Table table = Table.parse(rs);
+            Table table = Table.parse(neo, rs);
             if (concernTable(tablePreList, table.getTableName())){
                 tableSet.add(table.getTableName());
                 addTable(neo, table);
@@ -339,7 +342,7 @@ public final class NeoDb {
             // 最后一个参数表示是否要求结果的准确性，倒数第二个表示是否唯一索引
             ResultSet rs = conn.getMetaData().getColumns(conn.getCatalog(), null, tableName, null);
             while (rs.next()) {
-                NeoInnerColumn innerColumn = NeoInnerColumn.parse(rs);
+                NeoInnerColumn innerColumn = NeoInnerColumn.parse(neo, rs);
                 columnMap.put(innerColumn.getColumnName(), innerColumn);
             }
         } catch (SQLException e) {

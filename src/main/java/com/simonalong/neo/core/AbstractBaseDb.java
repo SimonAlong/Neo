@@ -2,7 +2,6 @@ package com.simonalong.neo.core;
 
 import com.simonalong.neo.Columns;
 import com.simonalong.neo.NeoMap;
-import com.simonalong.neo.TableMap;
 import com.simonalong.neo.db.NeoPage;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -17,7 +16,7 @@ import java.util.concurrent.Executor;
  * @author zhouzhenyong
  * @since 2019-08-17 17:17
  */
-public abstract class AbstractBaseDb extends AbstractDbAsync implements DbSync, ExecuteSql {
+public abstract class AbstractBaseDb extends AbstractDbAsync implements DbSync {
 
     @Override
     public Executor getExecutor() {
@@ -158,12 +157,12 @@ public abstract class AbstractBaseDb extends AbstractDbAsync implements DbSync, 
 
     @Override
     public <T> CompletableFuture<List<T>> valuesAsync(String tableName, Class<T> tClass, String field, NeoMap searchMap, Executor executor){
-        return CompletableFuture.supplyAsync(() -> values(tableName, tClass, field, searchMap), executor);
+        return CompletableFuture.supplyAsync(() -> values(tClass, tableName, field, searchMap), executor);
     }
 
     @Override
     public <T> CompletableFuture<List<T>> valuesAsync(String tableName, Class<T> tClass, String field, Object entity, Executor executor){
-        return CompletableFuture.supplyAsync(() -> values(tableName, tClass, field, entity), executor);
+        return CompletableFuture.supplyAsync(() -> values(tClass, tableName, field, entity), executor);
     }
 
     @Override
@@ -183,12 +182,12 @@ public abstract class AbstractBaseDb extends AbstractDbAsync implements DbSync, 
 
     @Override
     public <T> CompletableFuture<T> valueAsync(String tableName, Class<T> tClass, String field, NeoMap searchMap, Executor executor){
-        return CompletableFuture.supplyAsync(() -> value(tableName, tClass, field, searchMap), executor);
+        return CompletableFuture.supplyAsync(() -> value(tClass, tableName, field, searchMap), executor);
     }
 
     @Override
     public <T> CompletableFuture<T> valueAsync(String tableName, Class<T> tClass, String field, Object entity, Executor executor){
-        return CompletableFuture.supplyAsync(() -> value(tableName, tClass, field, entity), executor);
+        return CompletableFuture.supplyAsync(() -> value(tClass, tableName, field, entity), executor);
     }
 
     @Override
@@ -304,65 +303,5 @@ public abstract class AbstractBaseDb extends AbstractDbAsync implements DbSync, 
     @Override
     public <T> CompletableFuture<Integer> batchUpdateEntityAsync(String tableName, List<T> dataList, Columns columns, Executor executor){
         return CompletableFuture.supplyAsync(() -> batchUpdateEntity(tableName, dataList, columns), executor);
-    }
-
-    @Override
-    public CompletableFuture<TableMap> exeOneAsync(String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeOne(sql, parameters), executor);
-    }
-
-    @Override
-    public <T> CompletableFuture<T> exeOneAsync(Class<T> tClass, String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeOne(tClass, sql, parameters), executor);
-    }
-
-    @Override
-    public CompletableFuture<List<TableMap>> exeListAsync(String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeList(sql, parameters), executor);
-    }
-
-    @Override
-    public <T> CompletableFuture<List<T>> exeListAsync(Class<T> tClass, String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeList(tClass, sql, parameters), executor);
-    }
-
-    @Override
-    public <T> CompletableFuture<T> exeValueAsync(Class<T> tClass, String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeValue(tClass, sql, parameters), executor);
-    }
-
-    @Override
-    public CompletableFuture<String> exeValueAsync(String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeValue(sql, parameters), executor);
-    }
-
-    @Override
-    public <T> CompletableFuture<List<T>> exeValuesAsync(Class<T> tClass, String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeValues(tClass, sql, parameters), executor);
-    }
-
-    @Override
-    public CompletableFuture<List<String>> exeValuesAsync(String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeValues(sql, parameters), executor);
-    }
-
-    @Override
-    public CompletableFuture<List<TableMap>> exePageAsync(String sql, Integer startIndex, Integer pageSize, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exePage(sql, startIndex, pageSize, parameters), executor);
-    }
-
-    @Override
-    public CompletableFuture<List<TableMap>> exePageAsync(String sql, NeoPage neoPage, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exePage(sql, neoPage, parameters), executor);
-    }
-
-    @Override
-    public CompletableFuture<Integer> exeCountAsync(String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> exeCount(sql, parameters), executor);
-    }
-
-    @Override
-    public CompletableFuture<List<List<TableMap>>> executeAsync(String sql, Executor executor, Object... parameters){
-        return CompletableFuture.supplyAsync(() -> execute(sql, parameters), executor);
     }
 }
